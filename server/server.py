@@ -26,6 +26,16 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
 
+_SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _rel(path: str) -> str:
+    """絶対パスをサーバディレクトリからの相対パスに変換する"""
+    try:
+        return os.path.relpath(path, _SERVER_DIR)
+    except ValueError:
+        return path
+
 
 app = FastAPI(title="SAM 3D + SAM-6D Pipeline Server")
 
@@ -43,7 +53,7 @@ _sam3d_device: str = "cuda"
 _sam6d_url: str = "http://localhost:8081"
 
 # ホスト↔Dockerコンテナ間の共有tmpディレクトリパスマッピング
-_host_tmp: str   = "/home/okada/ws/project/tmp"
+_host_tmp: str   = os.path.join(_SERVER_DIR, "tmp")
 _docker_tmp: str = "/workspace/tmp"
 
 
@@ -171,7 +181,7 @@ async def reconstruct(
         cv2.imwrite(os.path.join(output_dir, f"mask_sam2_{_i+1}.png"), _m)
     mask_sam2_path = os.path.join(output_dir, "mask_sam2.png")
     cv2.imwrite(mask_sam2_path, (best_mask.astype(np.uint8) * 255))
-    print(f"[Server] SAM2 マスク保存: {output_dir}/mask_sam2_{{1,2,3}}.png")
+    print(f"[Server] SAM2 マスク保存: {_rel(output_dir)}/mask_sam2_{{1,2,3}}.png")
 
     # Step 2: SAM-3D でモデル生成 (推論後に即削除)
     output = _load_sam3d_and_run(rgb, best_mask, seed)
@@ -180,7 +190,7 @@ async def reconstruct(
     os.makedirs(output_dir, exist_ok=True)
     ply_path = os.path.join(output_dir, f"object_seed{seed}.ply")
     output["gs"].save_ply(ply_path)
-    print(f"[Server] PLY保存: {ply_path}")
+    print(f"[Server] PLY保存: {_rel(ply_path)}")
 
     # Gaussian splat PLY から XYZ 座標を抽出
     from plyfile import PlyData
@@ -288,7 +298,7 @@ async def reconstruct_mesh(
         cv2.imwrite(os.path.join(save_dir, f"mask_sam2_{_i+1}.png"), _m)
     mask_sam2_path = os.path.join(save_dir, "mask_sam2.png")
     cv2.imwrite(mask_sam2_path, (best_mask.astype(np.uint8) * 255))
-    print(f"[Server] SAM2 マスク保存: {save_dir}/mask_sam2_{{1,2,3}}.png")
+    print(f"[Server] SAM2 マスク保存: {_rel(save_dir)}/mask_sam2_{{1,2,3}}.png")
 
     # SAM-3D をロード → 推論 → 即削除してGPUを解放
     output = _load_sam3d_and_run(rgb, best_mask, seed)
@@ -301,7 +311,7 @@ async def reconstruct_mesh(
     # GS点群をPLYに保存
     import open3d as o3d
     output["gs"].save_ply(ply_path)
-    print(f"[Server] GS PLY 保存: {ply_path}")
+    print(f"[Server] GS PLY 保存: {_rel(ply_path)}")
 
     # 点群 → メッシュ変換
     print("[Server] 点群をメッシュに変換中 (BPA)...")
@@ -328,14 +338,14 @@ async def reconstruct_mesh(
     # 全点群を保存
     pcd_full_path = ply_path.replace(".ply", "_pcd_full.ply")
     o3d.io.write_point_cloud(pcd_full_path, gs_ply)
-    print(f"[Server] 全点群保存: {pcd_full_path}")
+    print(f"[Server] 全点群保存: {_rel(pcd_full_path)}")
 
     # 10000点にダウンサンプリング
     if n_pts > 10000:
         gs_ply = gs_ply.random_down_sample(10000 / n_pts)
     pcd_path = ply_path.replace(".ply", "_pcd.ply")
     o3d.io.write_point_cloud(pcd_path, gs_ply)
-    print(f"[Server] ダウンサンプル後: {len(gs_ply.points)} points → {pcd_path}")
+    print(f"[Server] ダウンサンプル後: {len(gs_ply.points)} points → {_rel(pcd_path)}")
 
     gs_ply.estimate_normals()
     gs_ply.orient_normals_consistent_tangent_plane(k=15)
@@ -422,7 +432,7 @@ async def reconstruct_mesh(
     mesh_path = ply_path.replace(".ply", "_mesh.ply")
     o3d.io.write_triangle_mesh(mesh_path, mesh_o3d)
     t_mesh = time.time()
-    print(f"[Server] メッシュ保存: {mesh_path} ({len(mesh_o3d.triangles)} triangles) [合計: {t_mesh - t0:.1f}s]")
+    print(f"[Server] メッシュ保存: {_rel(mesh_path)} ({len(mesh_o3d.triangles)} triangles) [合計: {t_mesh - t0:.1f}s]")
 
     ys, xs = np.where(best_mask)
     mask_center_u = int(xs.mean())
@@ -562,7 +572,7 @@ async def pose_estimate(
     detection_ism_path = os.path.join(sam6d_results_dir, "detection_ism.json")
     with open(detection_ism_path, "w") as f:
         json.dump(detection_ism, f)
-    print(f"[pose_estimate] detection_ism.json 保存 (SAM2): {detection_ism_path}")
+    print(f"[pose_estimate] detection_ism.json 保存 (SAM2): {_rel(detection_ism_path)}")
 
     # vis_mask.png 生成 (マスクオーバーレイ + クリック点 + bbox)
     vis = rgb_np.copy()
@@ -571,7 +581,7 @@ async def pose_estimate(
     cv2.circle(vis, (px, py), 6, (255, 0, 0), -1)
     cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 0, 255), 2)
     cv2.imwrite(os.path.join(sam6d_results_dir, "vis_mask.png"), cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
-    print(f"[pose_estimate] vis_mask.png 保存: {sam6d_results_dir}")
+    print(f"[pose_estimate] vis_mask.png 保存: {_rel(sam6d_results_dir)}")
 
     # Docker パス
     rgb_docker   = f"{_docker_tmp}/rgb.png"
@@ -945,7 +955,7 @@ async def full_pipeline(
     os.makedirs(output_dir, exist_ok=True)
     ply_path = os.path.join(output_dir, f"object_seed{seed}.ply")
     recon_output["gs"].save_ply(ply_path)
-    print(f"[Pipeline] PLY 保存: {ply_path}")
+    print(f"[Pipeline] PLY 保存: {_rel(ply_path)}")
 
     from plyfile import PlyData
     ply_data = PlyData.read(ply_path)
@@ -1066,7 +1076,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--host-tmp", default="/home/okada/ws/project/tmp",
+    parser.add_argument("--host-tmp", default=os.path.join(_SERVER_DIR, "tmp"),
                         help="ホスト側の共有tmpディレクトリ (Dockerマウント元)")
     parser.add_argument("--docker-tmp", default="/workspace/tmp",
                         help="Dockerコンテナ内の共有tmpディレクトリ (マウント先)")
