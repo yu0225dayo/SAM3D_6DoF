@@ -1,17 +1,21 @@
 """
 テストデータを使った 6DoF pose 推定パイプラインのデモ
 
-RealSense なしでファイルから RGB + 深度を読み込み、
+RealSense なしでフォルダから RGB + 深度を読み込み、
 SAM-3D でメッシュ生成 → SAM-6D で pose 推定 → 可視化する。
 
+フォルダ構成:
+    demo_data/demo1/
+        rgb.png
+        depth.png
+        cam.json   ({"cam_K": [fx,0,cx,0,fy,cy,0,0,1], "depth_scale": 0.001})
+
 使用方法:
-    python test_demo.py \
-        --rgb demo_data/demo1/rgb.png \
-        --depth demo_data/demo1/depth.png \
-        --cam-json demo_data/demo1/cam.json
+    python test_demo.py demo_data/demo1
 """
 
 import argparse
+import json
 import os
 import sys
 import yaml
@@ -27,32 +31,30 @@ def load_config(path="config.yaml"):
         return yaml.safe_load(f)
 
 
-def load_intrinsics(args, img_w: int, img_h: int):
-    import json as _json
+def load_intrinsics(data_dir: str, img_w: int, img_h: int, depth_scale_ref: list):
     from utils.coord_transform import CameraIntrinsics
 
-    if args.cam_json:
-        with open(args.cam_json, "r") as f:
-            cam = _json.load(f)
+    cam_json = os.path.join(data_dir, "cam.json")
+    if os.path.exists(cam_json):
+        with open(cam_json, "r") as f:
+            cam = json.load(f)
         K = cam["cam_K"]
-        if len(K) == 9:
-            fx, cx = K[0], K[2]
-            fy, cy = K[4], K[5]
-        else:
+        if len(K) != 9:
             raise ValueError(f"cam_K の形式が不正: {K}")
-        if "depth_scale" in cam and args.depth_scale == 0.001:
-            args.depth_scale = cam["depth_scale"]
+        fx, cx = K[0], K[2]
+        fy, cy = K[4], K[5]
+        if "depth_scale" in cam:
+            depth_scale_ref[0] = cam["depth_scale"]
         print(f"[intrinsics] fx={fx} fy={fy} cx={cx} cy={cy}")
     else:
-        fx = args.fx
-        fy = args.fy
-        cx = args.cx if args.cx > 0 else img_w / 2
-        cy = args.cy if args.cy > 0 else img_h / 2
+        fx, fy = 591.0, 590.0
+        cx, cy = img_w / 2, img_h / 2
+        print("[intrinsics] cam.json なし → デフォルト値を使用")
 
     return CameraIntrinsics(fx=fx, fy=fy, cx=cx, cy=cy, width=img_w, height=img_h)
 
 
-def load_depth(depth_path: str, depth_scale: float = 1.0) -> np.ndarray:
+def load_depth(depth_path: str, depth_scale: float) -> np.ndarray:
     depth_raw = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
     if depth_raw is None:
         raise FileNotFoundError(f"深度画像が読み込めません: {depth_path}")
@@ -63,56 +65,46 @@ def load_depth(depth_path: str, depth_scale: float = 1.0) -> np.ndarray:
 
 def main():
     parser = argparse.ArgumentParser(description="テストデータで 6DoF pose 推定をデモ")
-    parser.add_argument("--config",  default="config.yaml")
-    parser.add_argument("--no-show", action="store_true",
+    parser.add_argument("data_dir", help="データフォルダ (rgb.png / depth.png / cam.json を含む)")
+    parser.add_argument("--config",      default="config.yaml")
+    parser.add_argument("--mesh-out",    default="meshes/test_object.ply")
+    parser.add_argument("--click-x",     type=int, default=-1)
+    parser.add_argument("--click-y",     type=int, default=-1)
+    parser.add_argument("--no-show",     action="store_true",
                         help="cv2.imshow を使わない (ヘッドレス環境用)")
-
-    # 入力データ
-    parser.add_argument("--rgb",         required=True, help="RGB 画像パス")
-    parser.add_argument("--depth",       required=True, help="深度画像パス")
-    parser.add_argument("--depth-scale", type=float, default=0.001,
-                        help="深度スケール係数 (0.001: mm→m)")
-
-    # カメラパラメータ
-    parser.add_argument("--cam-json", default=None,
-                        help="camera JSON ({cam_K:[fx,0,cx,0,fy,cy,0,0,1], depth_scale:1.0})")
-    parser.add_argument("--fx", type=float, default=591.0)
-    parser.add_argument("--fy", type=float, default=590.0)
-    parser.add_argument("--cx", type=float, default=-1)
-    parser.add_argument("--cy", type=float, default=-1)
-
-    # mesh
-    parser.add_argument("--mesh-out",     default="meshes/test_object.ply",
-                        help="生成 mesh の保存先 .ply")
-
-    # オプション
-    parser.add_argument("--click-x",     type=int,   default=-1)
-    parser.add_argument("--click-y",     type=int,   default=-1)
-    parser.add_argument("--object-size", type=float, default=0.0,
-                        help="物体の高さ [cm] (0=自動推定)")
-
     args = parser.parse_args()
-    config = load_config(args.config)
+
+    if not os.path.isdir(args.data_dir):
+        print(f"エラー: フォルダが見つかりません: {args.data_dir}")
+        sys.exit(1)
+
+    rgb_path   = os.path.join(args.data_dir, "rgb.png")
+    depth_path = os.path.join(args.data_dir, "depth.png")
+    for p in (rgb_path, depth_path):
+        if not os.path.exists(p):
+            print(f"エラー: {p} が見つかりません")
+            sys.exit(1)
+
+    config    = load_config(args.config)
+    sam_cfg   = config["sam3d"]
+    sam6d_cfg = config.get("sam6d", {})
 
     from pipeline.sam6d_detector import SAM6DClient
     from utils.visualization import project_pointcloud_on_image, render_mesh_on_image
     from utils.pointcloud_utils import load_pointcloud_ply
 
-    sam_cfg   = config["sam3d"]
-    sam6d_cfg = config.get("sam6d", {})
-
-    rgb = cv2.imread(args.rgb)
+    rgb = cv2.imread(rgb_path)
     if rgb is None:
-        raise FileNotFoundError(f"RGB 画像が読み込めません: {args.rgb}")
-    print(f"[RGB] {args.rgb}  shape={rgb.shape}")
-
-    depth = load_depth(args.depth, depth_scale=args.depth_scale)
-    if depth.shape[:2] != rgb.shape[:2]:
-        depth = cv2.resize(depth, (rgb.shape[1], rgb.shape[0]),
-                           interpolation=cv2.INTER_NEAREST)
+        raise FileNotFoundError(f"RGB 画像が読み込めません: {rgb_path}")
+    print(f"[RGB] {rgb_path}  shape={rgb.shape}")
 
     h, w = rgb.shape[:2]
-    intrinsics = load_intrinsics(args, w, h)
+    depth_scale_ref = [0.001]
+    intrinsics = load_intrinsics(args.data_dir, w, h, depth_scale_ref)
+
+    depth = load_depth(depth_path, depth_scale_ref[0])
+    if depth.shape[:2] != rgb.shape[:2]:
+        depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_NEAREST)
 
     client = SAM6DClient(
         server_url=sam_cfg["server_url"],
@@ -120,18 +112,16 @@ def main():
         timeout_pose=sam6d_cfg.get("timeout", 30.0),
     )
 
-    mesh_path      = args.mesh_out
-    mesh_method    = sam_cfg.get("mesh_method", "bpa")
-    object_size_mm = args.object_size * 10.0 if args.object_size > 0 else 0.0
+    mesh_path   = args.mesh_out
+    mesh_method = sam_cfg.get("mesh_method", "bpa")
+    os.makedirs(os.path.dirname(os.path.abspath(mesh_path)), exist_ok=True)
 
     # Step 1: mesh 生成
     print("\n[Step 1] SAM-3D でメッシュ生成中...")
-    os.makedirs(os.path.dirname(os.path.abspath(mesh_path)), exist_ok=True)
     if args.click_x >= 0 and args.click_y >= 0:
         client.save_reference_mesh(rgb, mesh_path,
                                    click_x=args.click_x, click_y=args.click_y,
-                                   mesh_method=mesh_method,
-                                   object_size_mm=object_size_mm)
+                                   mesh_method=mesh_method)
         click_x, click_y = args.click_x, args.click_y
     else:
         print("[物体選択] ウィンドウで物体をクリックしてください...")

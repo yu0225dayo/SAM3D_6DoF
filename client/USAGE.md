@@ -86,7 +86,7 @@ python test_demo.py \
 ```yaml
 sam3d:
   server_url: "http://10.40.1.126:8080"
-  mesh_method: "bpa"   # bpa / poisson / knn
+  mesh_method: "knn"   # bpa / poisson / knn
   timeout: 300.0
 
 sam6d:
