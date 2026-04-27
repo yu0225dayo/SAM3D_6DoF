@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# モデルファイル（サイズが大きいためGit管理外）
+*.pth
+*.pt
+*.ckpt
+*.bin
+
+# Docker
+.docker/
+
+# 一時ファイル
+tmp/
+*.tmp
+*.log
+
+# PyTorch / Hugging Face キャッシュ
+.cache/
+
+# OS
+.DS_Store
+
+# データ・出力・モデルファイル（Git管理外）
+client/data/
+client/output/
+client/save_model/
+client/test_data/

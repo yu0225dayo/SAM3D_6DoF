@@ -1,0 +1,97 @@
+version: "3.8"
+
+# SAM-6D マイクロサービス
+# 使い方:
+#   docker compose build sam6d
+#   docker compose up -d sam6d
+#
+# ホスト側の ~/ws/project が /workspace にマウントされる
+# SAM-6D リポジトリ: /workspace/SAM-6D
+# 共有テンポラリ:     /workspace/tmp
+
+services:
+  sam6d:
+    build:
+      context: .
+      dockerfile: Dockerfile.sam6d
+    image: sam6d-service:latest   # lihualiu/sam-6d:1.0 をベースにビルドしたもの
+    container_name: sam6d_service
+    restart: unless-stopped
+    # GPU アクセス
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      # SAM-6D リポジトリ (チェックポイントのダウンロード書き込みを許可)
+      - /home/okada/ws/project/server/SAM-6D:/workspace/SAM-6D
+      # sam6d_wrapper.py を共有 (同じワークスペースから参照)
+      - /home/okada/ws/project/server/sam6d_wrapper.py:/workspace/sam6d_wrapper.py
+      # sam6d_service.py をホスト側と共有 (コンテナ再ビルド不要で変更を反映)
+      - /home/okada/ws/project/server/sam6d_service.py:/service/sam6d_service.py
+      # 共有テンポラリ (中間ファイルを両サービスで共有)
+      - /home/okada/ws/project/tmp:/workspace/tmp
+    ports:
+      - "127.0.0.1:8081:8081"   # ローカルのみ公開 (外部非公開)
+    command: >
+      /opt/conda/envs/sam6d/bin/python /service/sam6d_service.py
+        --sam6d-repo /workspace/SAM-6D
+        --device cuda
+        --segmentor sam
+        --host 0.0.0.0
+        --port 8081
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s   # モデルロードに時間がかかるため
+
+  # client-test: test_demo.py をヘッドレスで実行して可視化結果を確認するサービス
+  # 使い方:
+  #   docker compose run --rm client-test
+  #   # 出力画像: /home/okada/ws/project/client/output/test/pose_check_mesh.png
+  client-test:
+    image: sam6d-service:latest   # sam6d と同じイメージを流用
+    profiles:
+      - test   # docker compose run client-test で明示的に起動 (up -d では起動しない)
+    volumes:
+      # クライアントコード (test_demo.py, utils/, pipeline/ など)
+      - /home/okada/ws/project/client:/client
+      # テンプレート・メッシュなどの共有tmpディレクトリ
+      - /home/okada/ws/project/tmp:/workspace/tmp
+    working_dir: /client
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYOPENGL_PLATFORM=egl   # Open3D OffscreenRenderer のヘッドレスレンダリング
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # ホストの port 8080 (SAM-3D) に接続するため
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - bash
+      - -c
+      - >-
+        /opt/conda/envs/sam6d/bin/pip install pyyaml plyfile open3d -q &&
+        /opt/conda/envs/sam6d/bin/python test_demo.py
+        --mode online
+        --no-show
+        --skip-grasp
+        --rgb test_data/rgb.png
+        --depth test_data/depth.png
+        --depth-scale 0.001
+        --mesh meshes/test_object.ply
+        --fx 572.4114 --fy 573.57043 --cx 325.2611 --cy 242.04899
+        --server-mesh-path /home/okada/ws/project/tmp/obj_000005.ply
+        --template-dir /home/okada/ws/project/tmp/obj_000005_templates
