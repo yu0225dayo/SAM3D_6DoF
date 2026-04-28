@@ -1086,8 +1086,9 @@ if __name__ == "__main__":
     parser.add_argument("--sam-checkpoint", default=None,
                         help="SAM2 モデル重みパス (.pt) "
                              "(省略時: {sam3d-repo}/../../sam2_checkpoints/sam2.1_hiera_large.pt)")
-    parser.add_argument("--sam3d-repo", required=True,
-                        help="sam-3d-objects リポジトリのパス")
+    parser.add_argument("--sam3d-repo",
+                        default=os.path.join(_SERVER_DIR, "sam-3d-objects"),
+                        help="sam-3d-objects リポジトリのパス (省略時: server/sam-3d-objects)")
     parser.add_argument("--sam3d-config", default=None,
                         help="sam-3d-objects の pipeline.yaml パス (省略時: {sam3d-repo}/checkpoints/hf/pipeline.yaml)")
     parser.add_argument("--sam6d-service", default="http://localhost:8081")
