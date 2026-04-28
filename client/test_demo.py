@@ -388,9 +388,13 @@ def main():
     print(f"[保存] {out_dir}/pose_check_bbox_axis.png")
 
     if not args.no_show:
-        cv2.imshow("pose check: bbox + axis", vis_bbox_axis)
-        print("何かキーを押すと終了...")
-        cv2.waitKey(0)
+        win = "pose check: bbox + axis"
+        cv2.imshow(win, vis_bbox_axis)
+        while True:
+            if cv2.waitKey(100) != -1:
+                break
+            if cv2.getWindowProperty(win, cv2.WND_PROP_VISIBLE) < 1:
+                break
         cv2.destroyAllWindows()
 
     print("\n" + "=" * 50)
