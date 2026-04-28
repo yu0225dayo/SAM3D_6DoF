@@ -852,8 +852,7 @@ async def estimate_pose(
     """
     import tempfile, shutil
 
-    tmpdir = tempfile.mkdtemp(dir=os.path.join(
-        os.path.dirname(args_global.sam3d_repo), "tmp"))
+    tmpdir = tempfile.mkdtemp(dir=_host_tmp)
     try:
         # アップロードファイルを一時保存
         rgb_path = os.path.join(tmpdir, "rgb.png")
@@ -1084,9 +1083,9 @@ async def segment_only(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sam-checkpoint",
-                        default="/home/okada/ws/project/sam2_checkpoints/sam2.1_hiera_large.pt",
-                        help="SAM2 モデル重みパス (.pt)")
+    parser.add_argument("--sam-checkpoint", default=None,
+                        help="SAM2 モデル重みパス (.pt) "
+                             "(省略時: {sam3d-repo}/../../sam2_checkpoints/sam2.1_hiera_large.pt)")
     parser.add_argument("--sam3d-repo", required=True,
                         help="sam-3d-objects リポジトリのパス")
     parser.add_argument("--sam3d-config", default=None,
@@ -1099,9 +1098,13 @@ if __name__ == "__main__":
     parser.add_argument("--docker-tmp", default="/workspace/tmp")
     args = parser.parse_args()
 
-    # --sam3d-config を省略した場合は sam3d-repo から自動導出
+    # 省略引数を sam3d-repo から自動導出
     if args.sam3d_config is None:
         args.sam3d_config = os.path.join(args.sam3d_repo, "checkpoints", "hf", "pipeline.yaml")
+    if args.sam_checkpoint is None:
+        # sam3d_repo = .../project/server/sam-3d-objects → project/ の2階層上
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.sam3d_repo)))
+        args.sam_checkpoint = os.path.join(project_dir, "sam2_checkpoints", "sam2.1_hiera_large.pt")
 
     args_global = args
     _sam6d_url  = args.sam6d_service
