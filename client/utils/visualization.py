@@ -6,6 +6,63 @@ import numpy as np
 import cv2 as _cv2
 
 
+def draw_pose_axes(
+    bgr: np.ndarray,
+    R: np.ndarray,
+    t: np.ndarray,
+    intrinsics,
+    axis_len_m: float = 0.05,
+) -> np.ndarray:
+    """
+    物体座標系の X/Y/Z 軸を画像に描画する。
+
+    Args:
+        bgr:        (H, W, 3) カメラ画像 (BGR)
+        R:          (3, 3) 回転行列 (物体→カメラ座標系)
+        t:          (3,)   平行移動 [m]
+        intrinsics: CameraIntrinsics
+        axis_len_m: 軸の長さ [m]
+
+    Returns:
+        (H, W, 3) 軸描画済み画像 (BGR)
+    """
+    result = bgr.copy()
+    H, W = result.shape[:2]
+
+    def proj(pt_cam):
+        x, y, z = pt_cam
+        if z <= 0.01:
+            return None
+        u = int(intrinsics.fx * x / z + intrinsics.cx)
+        v = int(intrinsics.fy * y / z + intrinsics.cy)
+        return (u, v)
+
+    origin_px = proj(t)
+    if origin_px is None:
+        return result
+
+    # X=赤, Y=緑, Z=青
+    for dir_obj, color, label in [
+        (np.array([1., 0., 0.]), (0, 0, 255), "X"),
+        (np.array([0., 1., 0.]), (0, 255, 0), "Y"),
+        (np.array([0., 0., 1.]), (255, 0, 0), "Z"),
+    ]:
+        tip_cam = R @ (dir_obj * axis_len_m) + t
+        tip_px = proj(tip_cam)
+        if tip_px:
+            _cv2.arrowedLine(result, origin_px, tip_px, color, 2,
+                             tipLength=0.3, line_type=_cv2.LINE_AA)
+            _cv2.putText(result, label, (tip_px[0] + 4, tip_px[1] + 4),
+                         _cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, _cv2.LINE_AA)
+
+    _cv2.circle(result, origin_px, 5, (0, 255, 255), -1)
+
+    t_mm = t * 1000
+    _cv2.putText(result, f"t=[{t_mm[0]:.0f},{t_mm[1]:.0f},{t_mm[2]:.0f}]mm",
+                 (10, 25), _cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, _cv2.LINE_AA)
+    return result
+
+
 def project_pointcloud_on_image(
     bgr: np.ndarray,
     points_3d: np.ndarray,

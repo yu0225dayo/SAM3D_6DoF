@@ -236,7 +236,7 @@ def main():
     sam6d_cfg = config.get("sam6d", {})
 
     from pipeline.sam6d_detector import SAM6DClient
-    from utils.visualization import project_pointcloud_on_image, render_mesh_on_image
+    from utils.visualization import project_pointcloud_on_image, draw_pose_axes
     from utils.pointcloud_utils import load_pointcloud_ply
 
     rgb = cv2.imread(rgb_path)
@@ -370,17 +370,23 @@ def main():
             cv2.imshow("server: mesh", img_mesh)
 
     mesh_pts = load_pointcloud_ply(mesh_path, target_points=2048)
-    vis_pts  = project_pointcloud_on_image(rgb, mesh_pts, R, t, intrinsics, points_unit="mm")
+    if object_size_mm > 0:
+        mesh_pts = mesh_pts * (object_size_mm / 200.0)
+        print(f"[可視化] メッシュスケール補正: 200mm → {object_size_mm:.0f}mm (factor={object_size_mm/200.0:.3f})")
+
+    # bbox + 点群投影
+    vis_pts = project_pointcloud_on_image(rgb, mesh_pts, R, t, intrinsics, points_unit="mm")
     cv2.imwrite(os.path.join(out_dir, "pose_check_pts.png"), vis_pts)
     print(f"[保存] {out_dir}/pose_check_pts.png")
 
-    vis_mesh = render_mesh_on_image(rgb, mesh_path, R, t, intrinsics, mesh_unit="mm")
-    cv2.imwrite(os.path.join(out_dir, "pose_check_mesh.png"), vis_mesh)
-    print(f"[保存] {out_dir}/pose_check_mesh.png")
+    # bbox + axis (スケール済みメッシュの最長辺の30%を軸長に設定)
+    axis_len_m = float(np.max(mesh_pts) - np.min(mesh_pts)) / 1000.0 * 0.3
+    vis_bbox_axis = draw_pose_axes(vis_pts, R, t, intrinsics, axis_len_m=axis_len_m)
+    cv2.imwrite(os.path.join(out_dir, "pose_check_bbox_axis.png"), vis_bbox_axis)
+    print(f"[保存] {out_dir}/pose_check_bbox_axis.png")
 
     if not args.no_show:
-        cv2.imshow("pose check: pts", vis_pts)
-        cv2.imshow("pose check: mesh", vis_mesh)
+        cv2.imshow("pose check: bbox + axis", vis_bbox_axis)
         print("何かキーを押すと終了...")
         cv2.waitKey(0)
         cv2.destroyAllWindows()
