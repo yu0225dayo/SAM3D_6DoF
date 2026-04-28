@@ -543,6 +543,15 @@ async def pose_estimate(
     output_dir_host = output_dir_docker.replace(_docker_tmp, _host_tmp)
     sam6d_results_dir = os.path.join(output_dir_host, "sam6d_results")
     os.makedirs(sam6d_results_dir, exist_ok=True)
+
+    # テンプレート存在チェック
+    templates_host = os.path.join(output_dir_host, "templates")
+    if not os.path.isdir(templates_host):
+        raise HTTPException(
+            500,
+            f"テンプレートが見つかりません: {_rel(templates_host)}\n"
+            "/reconstruct_mesh を再実行してください。"
+        )
     try:
         os.chmod(sam6d_results_dir, 0o777)
     except Exception:
@@ -660,6 +669,12 @@ async def pose_estimate(
 
     # 結果 JSON 読み込み
     result_json_path = os.path.join(sam6d_results_dir, "detection_pem.json")
+    if not os.path.exists(result_json_path):
+        raise HTTPException(
+            500,
+            f"pose 推定結果が見つかりません: {_rel(result_json_path)}\n"
+            f"stdout: {proc.stdout[-1000:]}\nstderr: {proc.stderr[-1000:]}"
+        )
     with open(result_json_path, "r") as f:
         detections = json.load(f)
 
@@ -730,9 +745,13 @@ async def pose_estimate(
     R_np = np.array(R_list, dtype=np.float32)
     t_mm_np = np.array(best["t"], dtype=np.float32)   # mm単位 (vis_pemと同じ)
     K_np = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
-    # PEM は Y 軸下向きで出力するため、可視化用に X 軸周り 180° 補正
+    # 可視化用補正: Y軸を常に画像上向きに統一
+    # カメラ座標系は Y 下向きのため、R_np[1,1] > 0 = Y が画像下向き
     _R_corr = np.diag([1.0, -1.0, -1.0]).astype(np.float32)
     R_vis = R_np @ _R_corr
+    if R_vis[1, 1] > 0:  # 補正後もY下向きなら追加フリップ
+        _R_corr = np.eye(3, dtype=np.float32)
+        R_vis = R_np.copy()
 
     mesh_host = mesh_path_for_pem.replace(_docker_tmp, _host_tmp)
     img1_b64 = ""
@@ -1065,22 +1084,25 @@ async def segment_only(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sam-checkpoint", required=True,
-                        help="SAM ViT-H モデル重みパス")
-    parser.add_argument("--sam3d-config", required=True,
-                        help="sam-3d-objects の pipeline.yaml パス")
+    parser.add_argument("--sam-checkpoint",
+                        default="/home/okada/ws/project/sam2_checkpoints/sam2.1_hiera_large.pt",
+                        help="SAM2 モデル重みパス (.pt)")
     parser.add_argument("--sam3d-repo", required=True,
                         help="sam-3d-objects リポジトリのパス")
-    parser.add_argument("--sam6d-service", default="http://localhost:8081",
-                        help="SAM-6D Docker サービスの URL (デフォルト: http://localhost:8081)")
+    parser.add_argument("--sam3d-config", default=None,
+                        help="sam-3d-objects の pipeline.yaml パス (省略時: {sam3d-repo}/checkpoints/hf/pipeline.yaml)")
+    parser.add_argument("--sam6d-service", default="http://localhost:8081")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument("--host-tmp", default=os.path.join(_SERVER_DIR, "tmp"),
-                        help="ホスト側の共有tmpディレクトリ (Dockerマウント元)")
-    parser.add_argument("--docker-tmp", default="/workspace/tmp",
-                        help="Dockerコンテナ内の共有tmpディレクトリ (マウント先)")
+    parser.add_argument("--host-tmp", default=os.path.join(_SERVER_DIR, "tmp"))
+    parser.add_argument("--docker-tmp", default="/workspace/tmp")
     args = parser.parse_args()
+
+    # --sam3d-config を省略した場合は sam3d-repo から自動導出
+    if args.sam3d_config is None:
+        args.sam3d_config = os.path.join(args.sam3d_repo, "checkpoints", "hf", "pipeline.yaml")
+
     args_global = args
     _sam6d_url  = args.sam6d_service
     _host_tmp   = args.host_tmp

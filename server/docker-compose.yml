@@ -2,12 +2,12 @@ version: "3.8"
 
 # SAM-6D マイクロサービス
 # 使い方:
-#   docker compose build sam6d
+#   docker compose build sam6d   # 初回またはパッケージ変更時のみ
 #   docker compose up -d sam6d
 #
-# ホスト側の server/ ディレクトリが /workspace にマウントされる
-# SAM-6D リポジトリ: /workspace/SAM-6D
-# 共有テンポラリ:     /workspace/tmp  (ホスト側: server/tmp/)
+# コンテナは「CUDA + パッケージ入り実行環境」として扱う。
+# server/ ディレクトリをまるごと /workspace にマウントするので
+# コードを変更したら docker compose restart sam6d だけでよい。
 
 services:
   sam6d:
@@ -28,15 +28,11 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=0
     volumes:
-      - ./SAM-6D:/workspace/SAM-6D
-      - ./sam6d_wrapper.py:/workspace/sam6d_wrapper.py
-      - ./sam6d_service.py:/service/sam6d_service.py
-      # 共有テンポラリ (server/tmp/ ↔ /workspace/tmp)
-      - ./tmp:/workspace/tmp
+      - ./:/workspace          # server/ 以下を丸ごとマウント（コード・データ共有）
     ports:
       - "127.0.0.1:8081:8081"
     command: >
-      /opt/conda/envs/sam6d/bin/python /service/sam6d_service.py
+      /opt/conda/envs/sam6d/bin/python /workspace/sam6d_service.py
         --sam6d-repo /workspace/SAM-6D
         --device cuda
         --segmentor sam
