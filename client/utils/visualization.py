@@ -73,6 +73,7 @@ def project_pointcloud_on_image(
     bbox_color=(0, 255, 255),
     point_size: int = 2,
     points_unit: str = "mm",
+    draw_points: bool = True,
 ) -> np.ndarray:
     """
     3D点群とbboxをRGB画像に投影して重ね描きする
@@ -103,8 +104,9 @@ def project_pointcloud_on_image(
     vs = (intrinsics.fy * pts_valid[:, 1] / pts_valid[:, 2] + intrinsics.cy).astype(np.int32)
 
     in_bounds = (us >= 0) & (us < w) & (vs >= 0) & (vs < h)
-    for u, v in zip(us[in_bounds], vs[in_bounds]):
-        _cv2.circle(result, (int(u), int(v)), point_size, point_color, -1)
+    if draw_points:
+        for u, v in zip(us[in_bounds], vs[in_bounds]):
+            _cv2.circle(result, (int(u), int(v)), point_size, point_color, -1)
 
     mins = pts_m.min(axis=0)
     maxs = pts_m.max(axis=0)

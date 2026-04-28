@@ -379,9 +379,11 @@ def main():
     cv2.imwrite(os.path.join(out_dir, "pose_check_pts.png"), vis_pts)
     print(f"[保存] {out_dir}/pose_check_pts.png")
 
-    # bbox + axis (スケール済みメッシュの最長辺の30%を軸長に設定)
+    # bbox + axis (点群なし — rgb に bbox と座標軸のみ投影)
     axis_len_m = float(np.max(mesh_pts) - np.min(mesh_pts)) / 1000.0 * 0.3
-    vis_bbox_axis = draw_pose_axes(vis_pts, R, t, intrinsics, axis_len_m=axis_len_m)
+    vis_bbox = project_pointcloud_on_image(
+        rgb, mesh_pts, R, t, intrinsics, points_unit="mm", draw_points=False)
+    vis_bbox_axis = draw_pose_axes(vis_bbox, R, t, intrinsics, axis_len_m=axis_len_m)
     cv2.imwrite(os.path.join(out_dir, "pose_check_bbox_axis.png"), vis_bbox_axis)
     print(f"[保存] {out_dir}/pose_check_bbox_axis.png")
 
