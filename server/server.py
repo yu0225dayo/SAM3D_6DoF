@@ -1029,6 +1029,8 @@ async def full_pipeline(
             "cad_path": ply_path,
             "template_dir": template_dir,
             "det_score_thresh": det_score_thresh,
+            "click_x": mask_center_u,
+            "click_y": mask_center_v,
         }, timeout=300.0)
         print(f"[Pipeline] 姿勢推定完了")
     finally:
@@ -1114,9 +1116,14 @@ if __name__ == "__main__":
 
     print("=" * 50)
     print(f"  SAM 3D + SAM-6D Pipeline Server")
-    print(f"  device:       {args.device}")
-    print(f"  host:port:    {args.host}:{args.port}")
+    print(f"  device:        {args.device}")
+    print(f"  host:port:     {args.host}:{args.port}")
     print(f"  sam6d_service: {_sam6d_url}")
+    print(f"  sam_checkpoint:{args.sam_checkpoint}")
+    print(f"  sam3d_repo:    {args.sam3d_repo}")
+    print(f"  sam3d_config:  {args.sam3d_config}")
+    print(f"  host_tmp:      {_host_tmp}")
+    print(f"  docker_tmp:    {_docker_tmp}")
     print("=" * 50)
 
     load_models(args.sam_checkpoint, args.sam3d_config, args.sam3d_repo, args.device)
