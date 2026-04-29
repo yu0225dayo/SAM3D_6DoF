@@ -206,7 +206,7 @@ def draw_height_pcd(
 
 def main():
     parser = argparse.ArgumentParser(description="テストデータで 6DoF pose 推定をデモ")
-    parser.add_argument("--data-dir", default="demo_data", dest="data_dir",
+    parser.add_argument("--data-dir", default="demo_data/demo1", dest="data_dir",
                         help="データフォルダ (rgb.png / depth.png / cam.json を含む)")
     parser.add_argument("--config",      default="config.yaml")
     parser.add_argument("--mesh-out",    default="meshes/test_object.ply")
