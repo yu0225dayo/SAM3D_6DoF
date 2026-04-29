@@ -84,10 +84,11 @@ docker compose build sam6d
 #### 1. SAM2 Large (server.py が使用)
 
 ```bash
-wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
+mkdir -p sam2_checkpoints
+wget -P sam2_checkpoints https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
 ```
 
-任意の場所に置き、`--sam-checkpoint <パス>` で指定します。
+配置先: `sam2_checkpoints/sam2.1_hiera_large.pt` (リポジトリルート直下)
 
 #### 2. SAM ViT-H (SAM-6D ISM が使用)
 
@@ -134,8 +135,9 @@ rm -rf checkpoints/hf-download
 
 ```
 SAM3D_6DoF/                                 ← このリポジトリのルート
+├── sam2_checkpoints/
+│   └── sam2.1_hiera_large.pt               ← SAM2 Large
 └── server/
-    ├── sam2.1_hiera_large.pt               ← SAM2 Large (任意の場所でも可)
     ├── sam-3d-objects/
     │   └── checkpoints/hf/
     │       └── pipeline.yaml (+ 重み)      ← SAM-3D
@@ -175,20 +177,10 @@ curl http://localhost:8081/health
 
 ```bash
 cd server
-python server.py \
-    --sam-checkpoint <SAM2チェックポイントのパス> \
-    --sam3d-config   sam-3d-objects/checkpoints/hf/pipeline.yaml \
-    --sam3d-repo     sam-3d-objects \
-    --sam6d-service  http://localhost:8081 \
-    --host 0.0.0.0 --port 8080
+python server.py
 
 # バックグラウンドで実行する場合
-nohup python server.py \
-    --sam-checkpoint <SAM2チェックポイントのパス> \
-    --sam3d-config   sam-3d-objects/checkpoints/hf/pipeline.yaml \
-    --sam3d-repo     sam-3d-objects \
-    --sam6d-service  http://localhost:8081 \
-    --host 0.0.0.0 --port 8080 > server.log 2>&1 &
+nohup python server.py > server.log 2>&1 &
 ```
 
 ### STEP 3: クライアント側 — テスト実行
