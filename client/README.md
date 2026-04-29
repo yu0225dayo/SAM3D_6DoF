@@ -34,13 +34,16 @@ robot:
 
 ```bash
 # データフォルダを指定して実行 (ウィンドウで物体をクリック選択)
-python test_demo.py demo_data/demo1
+python test_demo.py --data-dir demo_data/demo1
+
+# --data-dir 省略時は demo_data/demo1 がデフォルト
+python test_demo.py
 
 # クリック座標を手動指定してヘッドレス実行
-python test_demo.py demo_data/demo1 --click-x 320 --click-y 240 --no-show
+python test_demo.py --data-dir demo_data/demo1 --click-x 320 --click-y 240 --no-show
 
 # 重力ベクトルを手動指定 (cam.json に gravity がない場合)
-python test_demo.py demo_data/demo1 --gravity 0 -1 0
+python test_demo.py --data-dir demo_data/demo1 --gravity 0 -1 0
 ```
 
 ### 本番実行（RealSense カメラ）
@@ -86,7 +89,7 @@ demo_data/demo1/
 
 | オプション | 説明 |
 |---|---|
-| `data_dir` | データフォルダ (rgb.png / depth.png / cam.json を含む) **[必須]** |
+| `--data-dir <フォルダ>` | データフォルダ (rgb.png / depth.png / cam.json を含む) (デフォルト: `demo_data/demo1`) |
 | `--click-x / --click-y` | 物体指定クリック座標 (省略するとウィンドウでクリック選択) |
 | `--gravity GX GY GZ` | 重力方向ベクトル手動指定 (cam.json の gravity より優先) |
 | `--no-show` | `cv2.imshow` を使わない (SSH / ヘッドレス環境用) |

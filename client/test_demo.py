@@ -11,9 +11,9 @@ SAM-3D でメッシュ生成 → 重力方向から高さ推定 → SAM-6D で p
         cam.json   ({"cam_K": [fx,0,cx,0,fy,cy,0,0,1], "depth_scale": 0.001, "gravity": [gx,gy,gz]})
 
 使用方法:
-    python test_demo.py demo_data/demo1
-    python test_demo.py demo_data/demo1 --gravity 0 -1 0
-    python test_demo.py demo_data/demo1 --click-x 320 --click-y 240 --no-show
+    python test_demo.py --data-dir demo_data/demo1
+    python test_demo.py --data-dir demo_data/demo1 --gravity 0 -1 0
+    python test_demo.py --data-dir demo_data/demo1 --click-x 320 --click-y 240 --no-show
 """
 
 import argparse
