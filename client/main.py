@@ -210,6 +210,9 @@ def main():
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         cv2.imshow(WIN, preview)
         key = cv2.waitKey(1)
+        if cv2.getWindowProperty(WIN, cv2.WND_PROP_VISIBLE) < 1:  # ウィンドウを閉じた
+            camera.stop()
+            sys.exit(0)
         if key == 27:                           # ESC
             cv2.destroyAllWindows()
             camera.stop()
