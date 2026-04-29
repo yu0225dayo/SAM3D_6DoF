@@ -2,8 +2,8 @@
 RealSense RGBD + IMU でリアルタイム 6DoF pose 推定
 
 パイプライン:
-    1. IMU から重力ベクトル取得
-    2. RealSense ライブプレビュー → クリックで物体指定 → Enter で撮影
+    1. RealSense ライブプレビュー起動と同時に IMU 重力ベクトルをバックグラウンド取得
+    2. 1回目クリック: フレーム確定 / 2回目クリック: 物体選択 / Enter: 処理開始
     3. tmp_input/ に rgb.png / depth.png / cam.json (gravity 込み) を保存
     4. test_demo.py と同一フロー:
        Step 1: SAM-3D でメッシュ生成
@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import yaml
 import numpy as np
 import cv2
@@ -39,7 +40,7 @@ def load_config(path="config.yaml"):
 # IMU・高さ計算ユーティリティ (test_demo.py と共通)
 # ===========================================================================
 
-def get_gravity_imu(n_samples: int = 30) -> np.ndarray:
+def get_gravity_imu(n_samples: int = 10) -> np.ndarray:
     """RealSense 加速度センサーから重力方向の単位ベクトルを取得する。"""
     try:
         import pyrealsense2 as rs
@@ -139,7 +140,6 @@ def main():
     parser.add_argument("--gravity", type=float, nargs=3, default=None,
                         metavar=("GX", "GY", "GZ"),
                         help="重力ベクトル手動指定 (省略時は IMU から自動取得)")
-    parser.add_argument("--imu-samples", type=int, default=30)
     parser.add_argument("--no-show",     action="store_true")
     args = parser.parse_args()
 
@@ -170,64 +170,111 @@ def main():
         width=cam_cfg["width"], height=cam_cfg["height"],
     )
 
-    clicked = {"cx": -1, "cy": -1}
-    WIN = "RealSense Preview  |  Click object → Enter: shoot / ESC: quit"
+    # カメラ起動と同時に IMU サンプルをバックグラウンドで連続収集
+    imu_state = {"samples": [], "gravity": None, "stop": False}
+
+    def _imu_worker():
+        if args.gravity is not None:
+            return  # 手動指定時は収集不要
+        try:
+            import pyrealsense2 as rs
+            pipeline = rs.pipeline()
+            cfg = rs.config()
+            cfg.enable_stream(rs.stream.accel, rs.format.motion_xyz32f, 100)
+            pipeline.start(cfg)
+            try:
+                while not imu_state["stop"]:
+                    frames = pipeline.wait_for_frames()
+                    accel = frames.first_or_default(rs.stream.accel)
+                    if accel:
+                        m = accel.as_motion_frame().get_motion_data()
+                        imu_state["samples"].append([m.x, m.y, m.z])
+            finally:
+                pipeline.stop()
+        except Exception as e:
+            print(f"[IMU] 取得失敗: {e}")
+
+    if args.gravity is None:
+        imu_thread = threading.Thread(target=_imu_worker, daemon=True)
+        imu_thread.start()
+
+    state = {"phase": "live", "rgb": None, "depth": None, "cx": -1, "cy": -1}
+    WIN = "RealSense Preview  |  Click1: freeze frame / Click2: select object / Enter: confirm / ESC: quit"
 
     def on_mouse(event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            clicked["cx"] = x
-            clicked["cy"] = y
-            print(f"[Camera] クリック座標: ({x}, {y})")
+        if event != cv2.EVENT_LBUTTONDOWN:
+            return
+        if state["phase"] == "live":
+            # 1回目クリック: フレーム確定 + 重力ベクトル確定
+            state["phase"] = "frozen"
+            imu_state["stop"] = True
+            samples = imu_state["samples"]
+            if args.gravity is not None:
+                g = np.array(args.gravity, dtype=np.float64)
+                imu_state["gravity"] = g / np.linalg.norm(g)
+                print(f"[IMU] 手動指定: {imu_state['gravity']}")
+            elif samples:
+                g = np.mean(samples, axis=0)
+                imu_state["gravity"] = (g / np.linalg.norm(g)).astype(np.float64)
+                print(f"[IMU] 重力確定 ({len(samples)} サンプル): g={imu_state['gravity']}")
+            else:
+                print("[IMU] サンプルなし。重力ベクトル取得失敗。")
+            print("[Camera] フレーム確定")
+        elif state["phase"] == "frozen":
+            # 2回目クリック: 物体選択
+            state["cx"] = x
+            state["cy"] = y
+            state["phase"] = "selected"
+            print(f"[Camera] 物体選択: ({x}, {y})")
 
     cv2.namedWindow(WIN)
     cv2.setMouseCallback(WIN, on_mouse)
 
-    print("[Camera] プレビュー表示中 ... 物体をクリック → Enter で撮影、ESC で終了")
+    print("[Camera] プレビュー表示中 ... 1回目クリック: フレーム確定 / 2回目クリック: 物体選択 / Enter: 開始 / ESC: 終了")
     rgb = depth = None
     while True:
-        rgb, depth, _ = camera.capture()
-        preview = rgb.copy()
-        if clicked["cx"] < 0:
-            cv2.putText(preview, "Click object  |  ESC: quit",
+        if state["phase"] == "live":
+            rgb, depth, _ = camera.capture()
+            state["rgb"] = rgb
+            state["depth"] = depth
+
+        preview = state["rgb"].copy() if state["rgb"] is not None else np.zeros((cam_cfg["height"], cam_cfg["width"], 3), dtype=np.uint8)
+
+        if state["phase"] == "live":
+            cv2.putText(preview, "Click to freeze frame  |  ESC: quit",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        else:
-            cv2.circle(preview, (clicked["cx"], clicked["cy"]), 8, (0, 0, 255), -1)
-            cv2.putText(preview, "Enter: shoot & confirm  |  ESC: quit",
+        elif state["phase"] == "frozen":
+            cv2.putText(preview, "[FROZEN] Click object to select  |  ESC: quit",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+        elif state["phase"] == "selected":
+            cv2.circle(preview, (state["cx"], state["cy"]), 8, (0, 0, 255), -1)
+            cv2.putText(preview, "[FROZEN] Enter: start  |  Click again to re-select  |  ESC: quit",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
         cv2.imshow(WIN, preview)
         key = cv2.waitKey(1)
         if cv2.getWindowProperty(WIN, cv2.WND_PROP_VISIBLE) < 1:  # ウィンドウを閉じた
             camera.stop()
             sys.exit(0)
-        if key == 27:                           # ESC
+        if key == 27:                                    # ESC
             cv2.destroyAllWindows()
             camera.stop()
             sys.exit(0)
-        elif key == 13 and clicked["cx"] >= 0:  # Enter → このフレームで確定
-            print("[Camera] 撮影しました")
+        elif key == 13 and state["phase"] == "selected": # Enter → 処理開始
+            print("[Camera] 確定・処理開始")
             break
 
     cv2.destroyAllWindows()
     camera.stop()
+    rgb   = state["rgb"]
+    depth = state["depth"]
 
-    click_x, click_y = clicked["cx"], clicked["cy"]
+    click_x, click_y = state["cx"], state["cy"]
 
-    # ------------------------------------------------------------------
-    # Step 0b: IMU から重力ベクトル取得 (フレーム確定後)
-    # ------------------------------------------------------------------
-    if args.gravity is not None:
-        gravity_vec = np.array(args.gravity, dtype=np.float64)
-        gravity_vec /= np.linalg.norm(gravity_vec)
-        print(f"[重力] 手動指定: {gravity_vec}")
-    else:
-        try:
-            gravity_vec = get_gravity_imu(n_samples=args.imu_samples)
-        except Exception as e:
-            print(f"[重力] IMU 取得失敗: {e}\n      高さ推定をスキップします。")
-            gravity_vec = None
+    gravity_vec = imu_state["gravity"]
 
     # ------------------------------------------------------------------
-    # Step 0c: tmp_input/ に保存
+    # Step 0b: tmp_input/ に保存
     # ------------------------------------------------------------------
     os.makedirs(TMP_INPUT, exist_ok=True)
     cv2.imwrite(os.path.join(TMP_INPUT, "rgb.png"), rgb)
