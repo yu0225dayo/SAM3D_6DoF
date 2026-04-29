@@ -112,13 +112,25 @@ wget -P ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/ \
 
 #### 4. SAM-3D checkpoints (sam-3d-objects)
 
-sam-3d-objects リポジトリのセットアップスクリプトを実行してください。
+HuggingFace の [facebook/sam-3d-objects](https://huggingface.co/facebook/sam-3d-objects) からダウンロードします。  
+> **注意**: アクセス申請 (氏名・生年月日・所属) が必要です。承認後にダウンロード可能になります。
 
 ```bash
+# 1. HuggingFace 認証
+pip install 'huggingface-hub[cli]<1.0'
+hf auth login
+
+# 2. チェックポイントをダウンロード
 cd ~/ws/sam-3d-objects
-# リポジトリの README に従ってチェックポイントをダウンロード
-# 通常は checkpoints/hf/ 以下に配置される
+hf download --repo-type model \
+    --local-dir checkpoints/hf-download \
+    --max-workers 1 \
+    facebook/sam-3d-objects
+mv checkpoints/hf-download/checkpoints checkpoints/hf
+rm -rf checkpoints/hf-download
 ```
+
+配置先: `~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml` (+ モデル重み)
 
 #### 重みファイルの配置まとめ
 
