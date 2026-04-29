@@ -1,4 +1,4 @@
-name: sam3d-objects
+name: sam3d
 channels:
   - conda-forge
   - defaults

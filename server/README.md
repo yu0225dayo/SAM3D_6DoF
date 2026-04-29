@@ -16,7 +16,7 @@
 ```bash
 # conda を使う場合
 conda env create -f environment_sam3d.yml
-conda activate sam3d-objects
+conda activate sam3d
 
 # pip を使う場合
 pip install -r requirements_sam3d.txt
@@ -74,6 +74,8 @@ docker compose build sam6d
 ### STEP 1: SAM-6D Docker を起動
 
 ```bash
+conda activate sam3d
+cd server
 docker compose up -d sam6d
 
 # 起動確認 (モデルロードに 1〜2 分かかる)
@@ -85,6 +87,8 @@ curl http://localhost:8081/health
 ### STEP 2: server.py を起動
 
 ```bash
+conda activate sam3d
+cd server
 python server.py
 
 # バックグラウンドで実行する場合
