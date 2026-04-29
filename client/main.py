@@ -73,40 +73,32 @@ def main():
         width=cam_cfg["width"], height=cam_cfg["height"],
     )
 
-    # ライブプレビュー: クリックした瞬間のフレームを撮影
-    print("[Camera] プレビュー表示中... 物体をクリックして選択、ESC で終了")
-    rgb, depth = None, None
+    # ライブプレビュー: Enter 押下時に1枚撮影
+    print("[Camera] プレビュー表示中... 物体をクリックして座標を指定、Enter で撮影・確定、ESC で終了")
     click_x, click_y = args.click_x, args.click_y
-    captured = {"rgb": None, "depth": None, "cx": -1, "cy": -1}
+    clicked = {"cx": -1, "cy": -1}
 
-    WIN = "RealSense Preview (click object / ESC: quit)"
+    WIN = "RealSense Preview (click object / Enter: shoot / ESC: quit)"
 
     def on_mouse(event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            captured["cx"] = x
-            captured["cy"] = y
-            captured["rgb"]   = param["rgb"].copy()
-            captured["depth"] = param["depth"].copy()
-            print(f"[Camera] クリック座標: ({x}, {y}) → フレームをキャプチャしました")
+            clicked["cx"] = x
+            clicked["cy"] = y
+            print(f"[Camera] クリック座標: ({x}, {y})")
 
-    frame_buf = {}
     cv2.namedWindow(WIN)
-    cv2.setMouseCallback(WIN, on_mouse, frame_buf)
+    cv2.setMouseCallback(WIN, on_mouse)
 
     while True:
-        if captured["cx"] < 0:
-            # クリック前: ライブ更新
-            rgb, depth, _ = camera.capture()
-            frame_buf["rgb"]   = rgb
-            frame_buf["depth"] = depth
-            preview = rgb.copy()
-            cv2.putText(preview, "Click object to capture  |  ESC: quit",
+        rgb, depth, _ = camera.capture()
+        preview = rgb.copy()
+
+        if clicked["cx"] < 0:
+            cv2.putText(preview, "Click object  |  ESC: quit",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         else:
-            # クリック後: 静止画で固定
-            preview = captured["rgb"].copy()
-            cv2.circle(preview, (captured["cx"], captured["cy"]), 8, (0, 0, 255), -1)
-            cv2.putText(preview, "Enter: confirm  |  ESC: quit",
+            cv2.circle(preview, (clicked["cx"], clicked["cy"]), 8, (0, 0, 255), -1)
+            cv2.putText(preview, "Enter: shoot & confirm  |  ESC: quit",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         cv2.imshow(WIN, preview)
@@ -117,16 +109,15 @@ def main():
             camera.stop()
             print("終了します。")
             sys.exit(0)
-        elif key == 13 and captured["cx"] >= 0:  # Enter で確定
+        elif key == 13 and clicked["cx"] >= 0:  # Enter: このフレームで確定
+            print("[Camera] 撮影しました")
             break
 
     cv2.destroyAllWindows()
     camera.stop()
 
-    rgb    = captured["rgb"]
-    depth  = captured["depth"]
-    click_x = captured["cx"]
-    click_y = captured["cy"]
+    click_x = clicked["cx"]
+    click_y = clicked["cy"]
 
     out_dir = os.path.join("output", datetime.now().strftime("%Y%m%d_%H%M%S"))
     os.makedirs(out_dir, exist_ok=True)
