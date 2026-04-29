@@ -73,29 +73,76 @@ def main():
         width=cam_cfg["width"], height=cam_cfg["height"],
     )
 
-    # ライブプレビュー: Space で撮影、ESC で終了
-    print("[Camera] プレビュー表示中... Space で撮影、ESC で終了")
+    # ライブプレビュー: クリックした瞬間のフレームを撮影
+    print("[Camera] プレビュー表示中... 物体をクリックして選択、ESC で終了")
     rgb, depth = None, None
+    click_x, click_y = args.click_x, args.click_y
+    captured = {"rgb": None, "depth": None, "cx": -1, "cy": -1}
+
+    WIN = "RealSense Preview (click object / ESC: quit)"
+
+    def on_mouse(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            captured["cx"] = x
+            captured["cy"] = y
+            captured["rgb"]   = param["rgb"].copy()
+            captured["depth"] = param["depth"].copy()
+            print(f"[Camera] クリック座標: ({x}, {y}) → フレームをキャプチャしました")
+
+    frame_buf = {}
+    cv2.namedWindow(WIN)
+    cv2.setMouseCallback(WIN, on_mouse, frame_buf)
+
     while True:
         rgb, depth, _ = camera.capture()
+        frame_buf["rgb"]   = rgb
+        frame_buf["depth"] = depth
+
         preview = rgb.copy()
-        cv2.putText(preview, "Space: capture  ESC: quit",
-                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-        cv2.imshow("RealSense Preview", preview)
+        msg = "Click object to capture  |  ESC: quit"
+        cv2.putText(preview, msg, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+        if captured["cx"] >= 0:
+            cv2.circle(preview, (captured["cx"], captured["cy"]), 8, (0, 0, 255), -1)
+            cv2.putText(preview, "Press Enter to confirm",
+                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+        cv2.imshow(WIN, preview)
         key = cv2.waitKey(1)
-        if key == 32:   # Space
-            print("[Camera] 撮影しました")
-            break
-        elif key == 27: # ESC
+
+        if key == 27:   # ESC
             cv2.destroyAllWindows()
             camera.stop()
             print("終了します。")
             sys.exit(0)
-    cv2.destroyWindow("RealSense Preview")
+        elif key == 13 and captured["cx"] >= 0:  # Enter で確定
+            break
+
+    cv2.destroyAllWindows()
     camera.stop()
+
+    rgb    = captured["rgb"]
+    depth  = captured["depth"]
+    click_x = captured["cx"]
+    click_y = captured["cy"]
 
     out_dir = os.path.join("output", datetime.now().strftime("%Y%m%d_%H%M%S"))
     os.makedirs(out_dir, exist_ok=True)
+
+    # RGBD + カメラパラメータを保存
+    cv2.imwrite(os.path.join(out_dir, "rgb.png"), rgb)
+    depth_mm = (depth / camera.depth_scale).astype(np.uint16)
+    cv2.imwrite(os.path.join(out_dir, "depth.png"), depth_mm)
+    cam_json_path = os.path.join(out_dir, "cam.json")
+    with open(cam_json_path, "w") as f:
+        json.dump({
+            "cam_K": [intrinsics.fx, 0.0, intrinsics.cx,
+                      0.0, intrinsics.fy, intrinsics.cy,
+                      0.0, 0.0, 1.0],
+            "depth_scale": float(camera.depth_scale),
+        }, f, indent=2)
+    print(f"[保存] {out_dir}/rgb.png / depth.png / cam.json")
 
     client = SAM6DClient(
         server_url=sam_cfg["server_url"],
@@ -108,19 +155,15 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(mesh_path)), exist_ok=True)
 
     print("\n[Step 1] SAM-3D でメッシュ生成中...")
-    if args.click_x >= 0 and args.click_y >= 0:
-        client.save_reference_mesh(rgb, mesh_path,
-                                   click_x=args.click_x, click_y=args.click_y,
-                                   mesh_method=sam_cfg.get("mesh_method", "bpa"))
-        click_x, click_y = args.click_x, args.click_y
-    else:
-        print("[物体選択] ウィンドウで物体をクリックしてください...")
-        _, click_x, click_y, sam_masks, sam_scores = client.save_reference_mesh_interactive(
-            rgb, mesh_path, mesh_method=sam_cfg.get("mesh_method", "bpa"))
+    _, sam_masks, sam_scores = client.save_reference_mesh(
+        rgb, mesh_path,
+        click_x=click_x, click_y=click_y,
+        mesh_method=sam_cfg.get("mesh_method", "bpa"),
+    )
     print(f"[Step 1完了] mesh: {mesh_path}")
 
     # SAM マスク確認画像を保存
-    if args.click_x < 0 and sam_masks:
+    if sam_masks:
         best_idx = int(np.argmax(sam_scores))
         panels = []
         for i, (mask, score) in enumerate(zip(sam_masks, sam_scores)):
