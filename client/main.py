@@ -94,19 +94,20 @@ def main():
     cv2.setMouseCallback(WIN, on_mouse, frame_buf)
 
     while True:
-        rgb, depth, _ = camera.capture()
-        frame_buf["rgb"]   = rgb
-        frame_buf["depth"] = depth
-
-        preview = rgb.copy()
-        msg = "Click object to capture  |  ESC: quit"
-        cv2.putText(preview, msg, (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-        if captured["cx"] >= 0:
+        if captured["cx"] < 0:
+            # クリック前: ライブ更新
+            rgb, depth, _ = camera.capture()
+            frame_buf["rgb"]   = rgb
+            frame_buf["depth"] = depth
+            preview = rgb.copy()
+            cv2.putText(preview, "Click object to capture  |  ESC: quit",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        else:
+            # クリック後: 静止画で固定
+            preview = captured["rgb"].copy()
             cv2.circle(preview, (captured["cx"], captured["cy"]), 8, (0, 0, 255), -1)
-            cv2.putText(preview, "Press Enter to confirm",
-                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(preview, "Enter: confirm  |  ESC: quit",
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         cv2.imshow(WIN, preview)
         key = cv2.waitKey(1)
