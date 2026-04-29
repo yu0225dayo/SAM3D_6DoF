@@ -83,7 +83,7 @@ SAM3D_6DoF/
 
 | 環境 | 要件 |
 |---|---|
-| サーバ | Linux, NVIDIA GPU (VRAM 16 GB 以上推奨), Docker, CUDA |
+| サーバ | Linux, NVIDIA RTX A6000  (VRAM 32 GB 以上推奨), Docker, CUDA |
 | クライアント | Windows / Linux, Python 3.9+, (RealSense SDK) |
 
 ### サーバ側セットアップ
