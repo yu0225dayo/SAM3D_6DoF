@@ -82,6 +82,12 @@ class RealSenseCamera:
         self.cy = intrinsics.ppy
 
         self._running = True
+
+        # ウォームアップ: 起動直後は不安定なため最初の数フレームを読み捨てる
+        print("[Camera] ウォームアップ中...")
+        for _ in range(30):
+            self.pipeline.wait_for_frames(timeout_ms=10000)
+
         print(f"[Camera] RealSense 起動完了 ({self.width}x{self.height} @ {self.fps}fps)")
         print(f"[Camera] 内部パラメータ: fx={self.fx:.2f}, fy={self.fy:.2f}, "
               f"cx={self.cx:.2f}, cy={self.cy:.2f}")
@@ -98,7 +104,7 @@ class RealSenseCamera:
         if not self._running:
             raise RuntimeError("カメラが起動していません。start() を先に呼んでください。")
 
-        frames = self.pipeline.wait_for_frames()
+        frames = self.pipeline.wait_for_frames(timeout_ms=10000)
         aligned_frames = self.align.process(frames)
 
         color_frame = aligned_frames.get_color_frame()

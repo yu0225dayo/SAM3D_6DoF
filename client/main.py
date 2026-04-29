@@ -73,9 +73,25 @@ def main():
         width=cam_cfg["width"], height=cam_cfg["height"],
     )
 
-    # 数フレーム読み捨てて安定させてから取得
-    for _ in range(5):
+    # ライブプレビュー: Space で撮影、ESC で終了
+    print("[Camera] プレビュー表示中... Space で撮影、ESC で終了")
+    rgb, depth = None, None
+    while True:
         rgb, depth, _ = camera.capture()
+        preview = rgb.copy()
+        cv2.putText(preview, "Space: capture  ESC: quit",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        cv2.imshow("RealSense Preview", preview)
+        key = cv2.waitKey(1)
+        if key == 32:   # Space
+            print("[Camera] 撮影しました")
+            break
+        elif key == 27: # ESC
+            cv2.destroyAllWindows()
+            camera.stop()
+            print("終了します。")
+            sys.exit(0)
+    cv2.destroyWindow("RealSense Preview")
     camera.stop()
 
     out_dir = os.path.join("output", datetime.now().strftime("%Y%m%d_%H%M%S"))
