@@ -21,7 +21,7 @@ conda activate client_sam3d6dof
 ### pip を使う場合
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements_client.txt
 ```
 
 ## 設定
