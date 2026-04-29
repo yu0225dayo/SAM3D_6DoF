@@ -127,34 +127,44 @@ nohup python server.py \
 ```bash
 cd client
 
-# フルパイプライン (mesh 生成 + 姿勢推定)
-python test_demo.py --mode full \
-    --rgb   demo_data/demo1/rgb.png \
-    --depth demo_data/demo1/depth.png \
-    --click-x 400 --click-y 280 \
-    --no-show --skip-grasp
+# データフォルダを指定して実行 (ウィンドウで物体をクリック選択)
+python test_demo.py --data_dir demo_data/demo1
+
+# クリック座標を手動指定してヘッドレス実行
+python test_demo.py --data_dir demo_data/demo1 \
+    --click-x 320 --click-y 240 --no-show
+
+# 重力ベクトルを手動指定 (cam.json に gravity がない場合)
+python test_demo.py --data_dir demo_data/demo1 \
+    --gravity 0 -1 0
 
 # 出力先: client/output/<timestamp>/
-#   pose_check_pts.png   … 点群+bbox の投影結果
-#   pose_check_mesh.png  … メッシュのレンダリング結果
+#   pose_check_pts.png       … 点群+bbox の投影結果
+#   pose_check_bbox_axis.png … bbox + 座標軸の投影結果
+#   server_pointcloud.png    … サーバ側点群可視化
+#   server_mesh.png          … サーバ側メッシュ可視化
+#   sam_mask.png             … SAM マスクオーバーレイ
+#   height_estimation.png    … 高さ推定点群可視化
 ```
 
-#### ステップを分けて実行する場合
+#### データフォルダ構成
 
-```bash
-# Step A: メッシュ生成のみ (物体クリックで選択)
-python test_demo.py --mode offline-mesh \
-    --rgb demo_data/demo1/rgb.png
-
-# Step B: 姿勢推定のみ (Step A の出力を使用)
-python test_demo.py --mode online \
-    --rgb   demo_data/demo1/rgb.png \
-    --depth demo_data/demo1/depth.png \
-    --mesh  meshes/test_object.ply \
-    --server-mesh-path "/home/okada/ws/project/tmp/server_reconstructions/object_seed42_mesh.ply" \
-    --template-dir     "/home/okada/ws/project/tmp/server_reconstructions/object_seed42_mesh_templates" \
-    --no-show --skip-grasp
 ```
+demo_data/demo1/
+├─ rgb.png        カラー画像
+├─ depth.png      深度画像 (uint16, mm 単位)
+└─ cam.json       カメラパラメータ
+```
+
+`cam.json` の例:
+```json
+{
+    "cam_K": [fx, 0, cx, 0, fy, cy, 0, 0, 1],
+    "depth_scale": 0.001,
+    "gravity": [0.0, -0.999, 0.04]
+}
+```
+> `gravity` フィールドは省略可。省略した場合は RealSense IMU から自動取得、または `--gravity` オプションで手動指定。
 
 ---
 
@@ -187,14 +197,13 @@ robot:
 
 | オプション | 説明 |
 |---|---|
-| `--mode full` | mesh 生成から姿勢推定まで一括実行 |
-| `--mode offline-mesh` | mesh 生成のみ |
-| `--mode online` | 姿勢推定のみ (mesh 指定が必要) |
+| `--data_dir <フォルダ>` | データフォルダ (rgb.png / depth.png / cam.json を含む) **[必須]** |
 | `--click-x / --click-y` | 物体指定クリック座標 (省略するとウィンドウでクリック選択) |
+| `--gravity GX GY GZ` | 重力方向ベクトル手動指定 (cam.json の gravity より優先) |
 | `--no-show` | `cv2.imshow` を使わない (SSH / ヘッドレス環境用) |
-| `--skip-grasp` | 把持姿勢生成をスキップ |
-| `--depth-scale` | 深度スケール係数 (デフォルト `0.001`: mm → m) |
-| `--fx/--fy/--cx/--cy` | カメラ内部パラメータ上書き |
+| `--mesh-out <パス>` | メッシュ保存先 PLY パス (デフォルト: `meshes/test_object.ply`) |
+| `--imu-samples <N>` | IMU から重力取得するサンプル数 (デフォルト: 30) |
+| `--config <パス>` | 設定ファイルパス (デフォルト: `config.yaml`) |
 
 ---
 
