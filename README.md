@@ -49,6 +49,17 @@ SAM3D_6DoF/
 │       └── Pose_Estimation_Model/
 │           └── checkpoints/
 │               └── sam-6d-pem-base.pth    # ★ SAM-6D PEM 重み
+│   └── tmp/                               # 実行時の中間ファイル (自動生成)
+│       ├── rgb.png / depth.png            #   受信した入力画像
+│       ├── camera_custom.json             #   受信したカメラパラメータ
+│       └── server_reconstructions/
+│           ├── mask_sam2.png              #   SAM2 マスク
+│           ├── object_seed42.ply          #   SAM-3D 生成点群
+│           ├── object_seed42_mesh.ply     #   生成メッシュ
+│           ├── object_seed42_mesh_scaled.ply  # スケール補正済みメッシュ
+│           └── object_seed42_mesh_templates/
+│               ├── templates/             #   SAM-6D レンダリングテンプレート
+│               └── sam6d_results/         #   SAM-6D 推定結果 JSON
 ├── client/                                # ローカル PC 側
 │   ├── test_demo.py                       # テスト用エントリポイント (静止画ファイル)
 │   ├── main.py                            # メインエントリポイント (RealSense カメラ)
