@@ -78,7 +78,7 @@ rm -rf checkpoints/hf-download
 docker compose build sam6d
 ```
 
-## 起動方法
+## 起動方法(受信待機)
 
 ### STEP 1: SAM-6D Docker を起動
 
