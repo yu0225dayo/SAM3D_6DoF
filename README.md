@@ -32,25 +32,36 @@ RGB-D カメラで物体を撮影し、GPU サーバ上で 3D 再構築と 6DoF 
 
 ```
 SAM3D_6DoF/
-├── server/                    # GPU 計算機側
-│   ├── server.py              # メインサーバ (FastAPI, port 8080)
-│   ├── sam6d_service.py       # SAM-6D マイクロサービス (Docker, port 8081)
-│   ├── sam6d_wrapper.py       # SAM-6D Python ラッパー
-│   ├── docker-compose.yml     # Docker 設定
-│   └── Dockerfile.sam6d       # SAM-6D Docker イメージ定義
-├── client/                    # ローカル PC 側
-│   ├── test_demo.py           # テスト用エントリポイント (静止画ファイル)
-│   ├── main.py                # メインエントリポイント (RealSense カメラ)
-│   ├── config.yaml            # 設定ファイル (サーバ URL, カメラパラメータ等)
+├── sam2_checkpoints/
+│   └── sam2.1_hiera_large.pt              # ★ SAM2 Large 重み
+├── server/                                # GPU 計算機側
+│   ├── server.py                          # メインサーバ (FastAPI, port 8080)
+│   ├── sam6d_service.py                   # SAM-6D マイクロサービス (Docker, port 8081)
+│   ├── sam6d_wrapper.py                   # SAM-6D Python ラッパー
+│   ├── docker-compose.yml                 # Docker 設定
+│   ├── Dockerfile.sam6d                   # SAM-6D Docker イメージ定義
+│   ├── sam-3d-objects/                    # SAM-3D サブモジュール
+│   │   └── checkpoints/hf/
+│   │       └── pipeline.yaml (+ 重み)     # ★ SAM-3D 重み
+│   └── SAM-6D/SAM-6D/
+│       ├── Instance_Segmentation_Model/
+│       │   └── sam_vit_h_4b8939.pth       # ★ SAM ViT-H 重み (ISM)
+│       └── Pose_Estimation_Model/
+│           └── checkpoints/
+│               └── sam-6d-pem-base.pth    # ★ SAM-6D PEM 重み
+├── client/                                # ローカル PC 側
+│   ├── test_demo.py                       # テスト用エントリポイント (静止画ファイル)
+│   ├── main.py                            # メインエントリポイント (RealSense カメラ)
+│   ├── config.yaml                        # 設定ファイル (サーバ URL, カメラパラメータ等)
 │   ├── pipeline/
-│   │   ├── sam6d_detector.py  # SAM-6D クライアント (HTTP)
-│   │   └── sam3d_segmentation.py  # SAM-3D クライアント (HTTP)
+│   │   ├── sam6d_detector.py              # SAM-6D クライアント (HTTP)
+│   │   └── sam3d_segmentation.py          # SAM-3D クライアント (HTTP)
 │   └── utils/
-│       ├── coord_transform.py # 座標変換ユーティリティ
-│       └── visualization.py   # 姿勢・点群の可視化
+│       ├── coord_transform.py             # 座標変換ユーティリティ
+│       └── visualization.py              # 姿勢・点群の可視化
 ├── gif/
-│   └── 2026_326.gif           # デモ動画
-└── howto.txt                  # 起動手順メモ
+│   └── 2026_326.gif                       # デモ動画
+└── howto.txt                              # 起動手順メモ
 ```
 
 ---
