@@ -74,7 +74,6 @@ docker compose build sam6d
 ### STEP 1: SAM-6D Docker を起動
 
 ```bash
-conda activate sam3d
 cd server
 docker compose up -d sam6d
 
