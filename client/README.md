@@ -7,7 +7,7 @@
 
 - Windows / Mac / Linux
 - Python 3.9+
-- (RealSense カメラ使用時は RealSense SDK)
+- Realsense R455 (IMUつき推奨)
 
 ## セットアップ
 
