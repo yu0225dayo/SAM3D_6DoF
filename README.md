@@ -1,18 +1,204 @@
-# Project
+# SAM3D_6DoF
 
-ローカルPC と計算機（GPU）をHTTPS通信で連携するプロジェクトです。
+RGB-D カメラで物体を撮影し、GPU サーバ上で 3D 再構築と 6DoF 姿勢推定を行うパイプラインです。  
+テンプレート CAD モデル不要・クリックひとつで物体の 6DoF 姿勢 (R, t) を取得できます。
 
-## 構成
+![demo](gif/2026_326.gif)
 
-```
-project/
-├── server/   # 計算機（GPU環境）側
-│   └── server.py
-└── client/   # ローカルPC側
-    └── client.py
-```
+---
 
 ## 概要
 
-- **client**: ローカルPCからデータを送信
-- **server**: 計算機でGPU処理を行い結果を返却
+```
+クライアント (ローカル PC / Windows)
+  ↓ RGB + Depth 送信 (HTTP :8080)
+サーバ (GPU 計算機 Linux)
+  ├─ server.py        ← SAM2 マスク + SAM-3D メッシュ生成
+  └─ SAM-6D Docker    ← テンプレートレンダリング + 6DoF 姿勢推定
+  ↓ R, t 返却
+クライアント
+  └─ 把持姿勢生成 (Shape2Gesture) → ロボット送信
+```
+
+| コンポーネント | 役割 |
+|---|---|
+| [SAM2](https://github.com/facebookresearch/segment-anything-2) | クリック点から物体マスクを生成 |
+| [SAM-3D](https://github.com/Pointcept/SAM-3D) | マスク内の RGB から 3D Gaussian Splat → PLY メッシュを生成 |
+| [SAM-6D](https://github.com/JiehongLin/SAM-6D) | テンプレートマッチングで 6DoF 姿勢 (R, t) を推定 |
+
+---
+
+## ディレクトリ構成
+
+```
+SAM3D_6DoF/
+├── server/                    # GPU 計算機側
+│   ├── server.py              # メインサーバ (FastAPI, port 8080)
+│   ├── sam6d_service.py       # SAM-6D マイクロサービス (Docker, port 8081)
+│   ├── sam6d_wrapper.py       # SAM-6D Python ラッパー
+│   ├── docker-compose.yml     # Docker 設定
+│   └── Dockerfile.sam6d       # SAM-6D Docker イメージ定義
+├── client/                    # ローカル PC 側
+│   ├── test_demo.py           # テスト用エントリポイント (静止画ファイル)
+│   ├── main.py                # メインエントリポイント (RealSense カメラ)
+│   ├── config.yaml            # 設定ファイル (サーバ URL, カメラパラメータ等)
+│   ├── pipeline/
+│   │   ├── sam6d_detector.py  # SAM-6D クライアント (HTTP)
+│   │   └── sam3d_segmentation.py  # SAM-3D クライアント (HTTP)
+│   └── utils/
+│       ├── coord_transform.py # 座標変換ユーティリティ
+│       └── visualization.py   # 姿勢・点群の可視化
+├── gif/
+│   └── 2026_326.gif           # デモ動画
+└── howto.txt                  # 起動手順メモ
+```
+
+---
+
+## セットアップ
+
+### 前提条件
+
+| 環境 | 要件 |
+|---|---|
+| サーバ | Linux, NVIDIA GPU (VRAM 16 GB 以上推奨), Docker, CUDA |
+| クライアント | Windows / Linux, Python 3.9+, (RealSense SDK) |
+
+### サーバ側セットアップ
+
+```bash
+# 1. リポジトリを展開
+cd ~/ws/project
+
+# 2. SAM-6D Docker イメージをビルド (初回のみ)
+cd server
+docker compose build sam6d
+
+# 3. モデルチェックポイントを配置
+#   SAM2:   /ws/okada/project/sam_vit_h_4b8939.pth
+#   SAM-3D: ~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml
+```
+
+### クライアント側セットアップ
+
+```bash
+cd client
+pip install -r requirements.txt
+```
+
+---
+
+## 使い方
+
+### STEP 1: サーバ側 — SAM-6D Docker を起動
+
+```bash
+cd ~/ws/project/server
+docker compose up -d sam6d
+
+# 起動確認 (モデルロードに 1〜2 分かかる)
+docker logs -f sam6d_service
+curl http://localhost:8081/health
+# → {"status":"ok","models_loaded":true} が返れば OK
+```
+
+### STEP 2: サーバ側 — server.py を起動
+
+```bash
+cd ~/ws/project/server
+python server.py \
+    --sam-checkpoint /ws/okada/project/sam_vit_h_4b8939.pth \
+    --sam3d-config   ~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml \
+    --sam3d-repo     ~/ws/sam-3d-objects \
+    --sam6d-service  http://localhost:8081 \
+    --host 0.0.0.0 --port 8080
+
+# バックグラウンドで実行する場合
+nohup python server.py \
+    --sam-checkpoint /ws/okada/project/sam_vit_h_4b8939.pth \
+    --sam3d-config   ~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml \
+    --sam3d-repo     ~/ws/sam-3d-objects \
+    --sam6d-service  http://localhost:8081 \
+    --host 0.0.0.0 --port 8080 > server.log 2>&1 &
+```
+
+### STEP 3: クライアント側 — テスト実行
+
+```bash
+cd client
+
+# フルパイプライン (mesh 生成 + 姿勢推定)
+python test_demo.py --mode full \
+    --rgb   demo_data/demo1/rgb.png \
+    --depth demo_data/demo1/depth.png \
+    --click-x 400 --click-y 280 \
+    --no-show --skip-grasp
+
+# 出力先: client/output/<timestamp>/
+#   pose_check_pts.png   … 点群+bbox の投影結果
+#   pose_check_mesh.png  … メッシュのレンダリング結果
+```
+
+#### ステップを分けて実行する場合
+
+```bash
+# Step A: メッシュ生成のみ (物体クリックで選択)
+python test_demo.py --mode offline-mesh \
+    --rgb demo_data/demo1/rgb.png
+
+# Step B: 姿勢推定のみ (Step A の出力を使用)
+python test_demo.py --mode online \
+    --rgb   demo_data/demo1/rgb.png \
+    --depth demo_data/demo1/depth.png \
+    --mesh  meshes/test_object.ply \
+    --server-mesh-path "/home/okada/ws/project/tmp/server_reconstructions/object_seed42_mesh.ply" \
+    --template-dir     "/home/okada/ws/project/tmp/server_reconstructions/object_seed42_mesh_templates" \
+    --no-show --skip-grasp
+```
+
+---
+
+## 設定ファイル (`client/config.yaml`)
+
+主要な設定項目:
+
+```yaml
+sam3d:
+  server_url: "http://10.40.1.126:8080"   # ← サーバの IP アドレスを変更
+  mesh_method: "knn"                       # メッシュ生成方式: bpa / poisson / knn
+
+robot:
+  mode: "mock"   # mock (デバッグ) / tcp / ros / serial
+```
+
+---
+
+## API エンドポイント (server.py)
+
+| エンドポイント | メソッド | 説明 |
+|---|---|---|
+| `/health` | GET | サーバ状態確認 |
+| `/reconstruct_mesh` | POST | RGB → SAM2 マスク → SAM-3D メッシュ生成 + SAM-6D テンプレートレンダリング |
+| `/pose_estimate` | POST | RGB + depth → SAM2 マスク → SAM-6D 6DoF 姿勢推定 |
+
+---
+
+## オプション一覧 (`test_demo.py`)
+
+| オプション | 説明 |
+|---|---|
+| `--mode full` | mesh 生成から姿勢推定まで一括実行 |
+| `--mode offline-mesh` | mesh 生成のみ |
+| `--mode online` | 姿勢推定のみ (mesh 指定が必要) |
+| `--click-x / --click-y` | 物体指定クリック座標 (省略するとウィンドウでクリック選択) |
+| `--no-show` | `cv2.imshow` を使わない (SSH / ヘッドレス環境用) |
+| `--skip-grasp` | 把持姿勢生成をスキップ |
+| `--depth-scale` | 深度スケール係数 (デフォルト `0.001`: mm → m) |
+| `--fx/--fy/--cx/--cy` | カメラ内部パラメータ上書き |
+
+---
+
+## 既知の制限
+
+- **スケール不一致**: SAM-3D は単眼 RGB から再構築するためスケールが不定。サーバ側でメッシュの最長辺を 200 mm に正規化して補正しているが、実物と完全には一致しない。
+- **モデルロード時間**: サーバ起動後、SAM-6D Docker のモデルロードに 1〜2 分かかる。
