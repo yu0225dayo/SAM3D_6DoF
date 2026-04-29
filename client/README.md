@@ -42,6 +42,9 @@ robot:
 ### テスト実行（静止画ファイル）
 
 ```bash
+conda activate client_sam3d6dof
+cd client
+
 # データフォルダを指定して実行 (ウィンドウで物体をクリック選択)
 python test_demo.py --data-dir demo_data/demo1
 
@@ -58,6 +61,8 @@ python test_demo.py --data-dir demo_data/demo1 --gravity 0 -1 0
 ### 本番実行（RealSense カメラ）
 
 ```bash
+conda activate client_sam3d6dof
+cd client
 python main.py
 ```
 
