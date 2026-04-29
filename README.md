@@ -68,7 +68,8 @@ SAM3D_6DoF/
 
 ```bash
 # 1. リポジトリを展開 (サブモジュールごと)
-cd ~/ws/project
+git clone <このリポジトリ>
+cd SAM3D_6DoF
 git submodule update --init --recursive
 
 # 2. SAM-6D Docker イメージをビルド (初回のみ)
@@ -83,18 +84,15 @@ docker compose build sam6d
 #### 1. SAM2 Large (server.py が使用)
 
 ```bash
-# SAM2 Large チェックポイント
-wget -P ~/ws/project/ \
-  https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
+wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
 ```
 
-配置先: `--sam-checkpoint` で指定するパス (例: `~/ws/project/sam2.1_hiera_large.pt`)
+任意の場所に置き、`--sam-checkpoint <パス>` で指定します。
 
 #### 2. SAM ViT-H (SAM-6D ISM が使用)
 
 ```bash
-# SAM ViT-H チェックポイント
-wget -P ~/ws/project/server/SAM-6D/SAM-6D/Instance_Segmentation_Model/ \
+wget -P server/SAM-6D/SAM-6D/Instance_Segmentation_Model/ \
   https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
 ```
 
@@ -103,8 +101,8 @@ wget -P ~/ws/project/server/SAM-6D/SAM-6D/Instance_Segmentation_Model/ \
 #### 3. SAM-6D PEM checkpoint (SAM-6D 姿勢推定モデル)
 
 ```bash
-mkdir -p ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints
-wget -P ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/ \
+mkdir -p server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints
+wget -P server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/ \
   https://huggingface.co/JiehongLin/SAM-6D/resolve/main/SAM-6D/Pose_Estimation_Model/checkpoints/sam-6d-pem-base.pth
 ```
 
@@ -120,8 +118,8 @@ HuggingFace の [facebook/sam-3d-objects](https://huggingface.co/facebook/sam-3d
 pip install 'huggingface-hub[cli]<1.0'
 hf auth login
 
-# 2. チェックポイントをダウンロード
-cd ~/ws/sam-3d-objects
+# 2. チェックポイントをダウンロード (sam-3d-objects ディレクトリ内で実行)
+cd server/sam-3d-objects
 hf download --repo-type model \
     --local-dir checkpoints/hf-download \
     --max-workers 1 \
@@ -130,14 +128,17 @@ mv checkpoints/hf-download/checkpoints checkpoints/hf
 rm -rf checkpoints/hf-download
 ```
 
-配置先: `~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml` (+ モデル重み)
+配置先: `server/sam-3d-objects/checkpoints/hf/pipeline.yaml` (+ モデル重み)
 
 #### 重みファイルの配置まとめ
 
 ```
-~/ws/project/
-├── sam2.1_hiera_large.pt                   ← SAM2 Large (server.py)
+SAM3D_6DoF/                                 ← このリポジトリのルート
 └── server/
+    ├── sam2.1_hiera_large.pt               ← SAM2 Large (任意の場所でも可)
+    ├── sam-3d-objects/
+    │   └── checkpoints/hf/
+    │       └── pipeline.yaml (+ 重み)      ← SAM-3D
     └── SAM-6D/
         └── SAM-6D/
             ├── Instance_Segmentation_Model/
@@ -145,11 +146,6 @@ rm -rf checkpoints/hf-download
             └── Pose_Estimation_Model/
                 └── checkpoints/
                     └── sam-6d-pem-base.pth ← SAM-6D PEM
-
-~/ws/sam-3d-objects/
-└── checkpoints/
-    └── hf/
-        └── pipeline.yaml (+ モデル重み)    ← SAM-3D
 ```
 
 ### クライアント側セットアップ
@@ -166,7 +162,7 @@ pip install -r requirements.txt
 ### STEP 1: サーバ側 — SAM-6D Docker を起動
 
 ```bash
-cd ~/ws/project/server
+cd server
 docker compose up -d sam6d
 
 # 起動確認 (モデルロードに 1〜2 分かかる)
@@ -178,19 +174,19 @@ curl http://localhost:8081/health
 ### STEP 2: サーバ側 — server.py を起動
 
 ```bash
-cd ~/ws/project/server
+cd server
 python server.py \
-    --sam-checkpoint /ws/okada/project/sam_vit_h_4b8939.pth \
-    --sam3d-config   ~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml \
-    --sam3d-repo     ~/ws/sam-3d-objects \
+    --sam-checkpoint <SAM2チェックポイントのパス> \
+    --sam3d-config   sam-3d-objects/checkpoints/hf/pipeline.yaml \
+    --sam3d-repo     sam-3d-objects \
     --sam6d-service  http://localhost:8081 \
     --host 0.0.0.0 --port 8080
 
 # バックグラウンドで実行する場合
 nohup python server.py \
-    --sam-checkpoint /ws/okada/project/sam_vit_h_4b8939.pth \
-    --sam3d-config   ~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml \
-    --sam3d-repo     ~/ws/sam-3d-objects \
+    --sam-checkpoint <SAM2チェックポイントのパス> \
+    --sam3d-config   sam-3d-objects/checkpoints/hf/pipeline.yaml \
+    --sam3d-repo     sam-3d-objects \
     --sam6d-service  http://localhost:8081 \
     --host 0.0.0.0 --port 8080 > server.log 2>&1 &
 ```
