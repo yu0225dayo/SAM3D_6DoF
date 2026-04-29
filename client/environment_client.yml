@@ -1,4 +1,4 @@
-name: sam3_econ
+name: client_sam3d6dof
 channels:
   - pytorch
   - nvidia

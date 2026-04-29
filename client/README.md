@@ -11,6 +11,15 @@
 
 ## セットアップ
 
+### conda を使う場合（推奨）
+
+```bash
+conda env create -f environment_client.yml
+conda activate client_sam3d6dof
+```
+
+### pip を使う場合
+
 ```bash
 pip install -r requirements.txt
 ```
