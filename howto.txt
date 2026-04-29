@@ -11,6 +11,52 @@
     └─ sam6d Docker       (SAM-6D, ポート 8081, server.py が内部呼び出し)
 
 ================================================================
+ モデル重みの配置 (初回セットアップ)
+================================================================
+
+  重みファイルはリポジトリに含まれていません。以下を配置してください。
+
+  【1】SAM2 Large  (server.py が使用)
+      ダウンロード:
+        wget -P ~/ws/project/ \
+          https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
+      配置先: --sam-checkpoint で指定するパス
+              (howto例では /ws/okada/project/ 以下に置いている)
+
+  【2】SAM ViT-H  (SAM-6D ISM が使用)
+      ダウンロード:
+        wget -P ~/ws/project/server/SAM-6D/SAM-6D/Instance_Segmentation_Model/ \
+          https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+      配置先:
+        server/SAM-6D/SAM-6D/Instance_Segmentation_Model/sam_vit_h_4b8939.pth
+
+  【3】SAM-6D PEM checkpoint  (姿勢推定モデル)
+      ダウンロード:
+        mkdir -p ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints
+        wget -P ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/ \
+          https://huggingface.co/JiehongLin/SAM-6D/resolve/main/SAM-6D/Pose_Estimation_Model/checkpoints/sam-6d-pem-base.pth
+      配置先:
+        server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/sam-6d-pem-base.pth
+
+  【4】SAM-3D checkpoints  (sam-3d-objects)
+      sam-3d-objects リポジトリの README に従ってダウンロード。
+      通常は checkpoints/hf/ 以下に配置される。
+
+  ━ 配置後のディレクトリ構成 ━
+  ~/ws/project/
+  ├── sam2.1_hiera_large.pt
+  └── server/
+      └── SAM-6D/SAM-6D/
+          ├── Instance_Segmentation_Model/
+          │   └── sam_vit_h_4b8939.pth
+          └── Pose_Estimation_Model/
+              └── checkpoints/
+                  └── sam-6d-pem-base.pth
+
+  ~/ws/sam-3d-objects/
+  └── checkpoints/hf/   ← SAM-3D モデル
+
+================================================================
  STEP 1: サーバ側 — SAM-6D Docker を起動
 ================================================================
 

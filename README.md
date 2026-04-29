@@ -67,16 +67,77 @@ SAM3D_6DoF/
 ### サーバ側セットアップ
 
 ```bash
-# 1. リポジトリを展開
+# 1. リポジトリを展開 (サブモジュールごと)
 cd ~/ws/project
+git submodule update --init --recursive
 
 # 2. SAM-6D Docker イメージをビルド (初回のみ)
 cd server
 docker compose build sam6d
+```
 
-# 3. モデルチェックポイントを配置
-#   SAM2:   /ws/okada/project/sam_vit_h_4b8939.pth
-#   SAM-3D: ~/ws/sam-3d-objects/checkpoints/hf/pipeline.yaml
+### モデル重みのダウンロード
+
+**重みファイルはリポジトリに含まれていません。** 以下の手順で取得してください。
+
+#### 1. SAM2 Large (server.py が使用)
+
+```bash
+# SAM2 Large チェックポイント
+wget -P ~/ws/project/ \
+  https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt
+```
+
+配置先: `--sam-checkpoint` で指定するパス (例: `~/ws/project/sam2.1_hiera_large.pt`)
+
+#### 2. SAM ViT-H (SAM-6D ISM が使用)
+
+```bash
+# SAM ViT-H チェックポイント
+wget -P ~/ws/project/server/SAM-6D/SAM-6D/Instance_Segmentation_Model/ \
+  https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth
+```
+
+配置先: `server/SAM-6D/SAM-6D/Instance_Segmentation_Model/sam_vit_h_4b8939.pth`
+
+#### 3. SAM-6D PEM checkpoint (SAM-6D 姿勢推定モデル)
+
+```bash
+mkdir -p ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints
+wget -P ~/ws/project/server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/ \
+  https://huggingface.co/JiehongLin/SAM-6D/resolve/main/SAM-6D/Pose_Estimation_Model/checkpoints/sam-6d-pem-base.pth
+```
+
+配置先: `server/SAM-6D/SAM-6D/Pose_Estimation_Model/checkpoints/sam-6d-pem-base.pth`
+
+#### 4. SAM-3D checkpoints (sam-3d-objects)
+
+sam-3d-objects リポジトリのセットアップスクリプトを実行してください。
+
+```bash
+cd ~/ws/sam-3d-objects
+# リポジトリの README に従ってチェックポイントをダウンロード
+# 通常は checkpoints/hf/ 以下に配置される
+```
+
+#### 重みファイルの配置まとめ
+
+```
+~/ws/project/
+├── sam2.1_hiera_large.pt                   ← SAM2 Large (server.py)
+└── server/
+    └── SAM-6D/
+        └── SAM-6D/
+            ├── Instance_Segmentation_Model/
+            │   └── sam_vit_h_4b8939.pth    ← SAM ViT-H (ISM)
+            └── Pose_Estimation_Model/
+                └── checkpoints/
+                    └── sam-6d-pem-base.pth ← SAM-6D PEM
+
+~/ws/sam-3d-objects/
+└── checkpoints/
+    └── hf/
+        └── pipeline.yaml (+ モデル重み)    ← SAM-3D
 ```
 
 ### クライアント側セットアップ
