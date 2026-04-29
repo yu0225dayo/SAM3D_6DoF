@@ -155,21 +155,7 @@ def main():
     from utils.visualization import project_pointcloud_on_image, draw_pose_axes
 
     # ------------------------------------------------------------------
-    # Step 0a: IMU から重力ベクトル取得
-    # ------------------------------------------------------------------
-    if args.gravity is not None:
-        gravity_vec = np.array(args.gravity, dtype=np.float64)
-        gravity_vec /= np.linalg.norm(gravity_vec)
-        print(f"[重力] 手動指定: {gravity_vec}")
-    else:
-        try:
-            gravity_vec = get_gravity_imu(n_samples=args.imu_samples)
-        except Exception as e:
-            print(f"[重力] IMU 取得失敗: {e}\n      高さ推定をスキップします。")
-            gravity_vec = None
-
-    # ------------------------------------------------------------------
-    # Step 0b: RealSense ライブプレビュー → クリック → Enter で撮影
+    # Step 0a: RealSense ライブプレビュー → クリック → Enter で撮影
     # ------------------------------------------------------------------
     camera = RealSenseCamera(
         width=cam_cfg["width"],
@@ -225,6 +211,20 @@ def main():
     camera.stop()
 
     click_x, click_y = clicked["cx"], clicked["cy"]
+
+    # ------------------------------------------------------------------
+    # Step 0b: IMU から重力ベクトル取得 (フレーム確定後)
+    # ------------------------------------------------------------------
+    if args.gravity is not None:
+        gravity_vec = np.array(args.gravity, dtype=np.float64)
+        gravity_vec /= np.linalg.norm(gravity_vec)
+        print(f"[重力] 手動指定: {gravity_vec}")
+    else:
+        try:
+            gravity_vec = get_gravity_imu(n_samples=args.imu_samples)
+        except Exception as e:
+            print(f"[重力] IMU 取得失敗: {e}\n      高さ推定をスキップします。")
+            gravity_vec = None
 
     # ------------------------------------------------------------------
     # Step 0c: tmp_input/ に保存
