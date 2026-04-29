@@ -58,7 +58,7 @@ python test_demo.py --data-dir demo_data/demo1 --click-x 320 --click-y 240 --no-
 python test_demo.py --data-dir demo_data/demo1 --gravity 0 -1 0
 ```
 
-![テストデモ](client/img/test_demo.png)
+![テストデモ](img/test_demo.png)
 
 ### 本番実行（RealSense カメラ）
 
@@ -68,7 +68,7 @@ cd client
 python main.py
 ```
 
-![本番実行](client/img/main.png)
+![本番実行](img/main.png)
 
 ## データフォルダ構成
 
