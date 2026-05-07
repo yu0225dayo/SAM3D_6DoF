@@ -709,12 +709,13 @@ async def pose_estimate(
         return img
 
     def _draw_axes(img, R, t_mm, K, length_mm):
-        """座標軸を赤(X)緑(Y)青(Z)の矢印で描画"""
+        """座標軸を赤(X)緑(Y)青(Z)の矢印で描画（矢印先端の Y を origin 基準で反転し人間視点 Y-up 表示）"""
         origin = _proj(t_mm[:, np.newaxis], np.eye(3), np.zeros(3), K)[0]
         for i, c in enumerate([(0,0,255),(0,255,0),(255,0,0)]):  # BGR: x=赤,y=緑,z=青
             end_mm = t_mm + R[:, i] * length_mm
             ep = _proj(end_mm[:, np.newaxis], np.eye(3), np.zeros(3), K)[0]
-            cv2.arrowedLine(img, tuple(origin), tuple(ep), c, 2, tipLength=0.3)
+            ep_disp = np.array([ep[0], 2 * origin[1] - ep[1]], dtype=np.int32)
+            cv2.arrowedLine(img, tuple(origin), tuple(ep_disp), c, 2, tipLength=0.3)
         return img
 
     def _make_vis(rgb_bgr, R, t_mm, pts_mm, K, pcd_color=(0,0,255), bbox_color=(0,0,255), with_axes=True):
